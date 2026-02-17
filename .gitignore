@@ -25,4 +25,4 @@ fricp_experiments/*_gt_transform.txt
 
 # --- Data folder ---
 # Ignore all subdirectories, keeping only the base PLY files
-data/*/
+data/

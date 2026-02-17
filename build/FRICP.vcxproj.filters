@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\prmat\OneDrive - Ecole Polytechnique\Documents\11_Python\Tout\NPM3D\Project\Fast-Robust-ICP\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\Users\prmat\OneDrive - Ecole Polytechnique\Documents\11_Python\Tout\NPM3D\Project\Fast-Robust-ICP\AndersonAcceleration.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\prmat\OneDrive - Ecole Polytechnique\Documents\11_Python\Tout\NPM3D\Project\Fast-Robust-ICP\FRICP.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\prmat\OneDrive - Ecole Polytechnique\Documents\11_Python\Tout\NPM3D\Project\Fast-Robust-ICP\ICP.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\prmat\OneDrive - Ecole Polytechnique\Documents\11_Python\Tout\NPM3D\Project\Fast-Robust-ICP\Types.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\prmat\OneDrive - Ecole Polytechnique\Documents\11_Python\Tout\NPM3D\Project\Fast-Robust-ICP\io_pc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\prmat\OneDrive - Ecole Polytechnique\Documents\11_Python\Tout\NPM3D\Project\Fast-Robust-ICP\median.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\prmat\OneDrive - Ecole Polytechnique\Documents\11_Python\Tout\NPM3D\Project\Fast-Robust-ICP\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{229AA4A4-B611-39C7-A4B8-6A750EC4B060}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{6A458721-FF9E-367D-B180-161F29630EFB}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

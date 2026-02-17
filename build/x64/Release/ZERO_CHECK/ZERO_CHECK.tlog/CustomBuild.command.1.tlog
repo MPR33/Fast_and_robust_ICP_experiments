@@ -1,0 +1,10 @@
+^C:\USERS\PRMAT\ONEDRIVE - ECOLE POLYTECHNIQUE\DOCUMENTS\11_PYTHON\TOUT\NPM3D\PROJECT\FAST-ROBUST-ICP\BUILD\CMAKEFILES\06A04BE98B2BC7081469DC14B889D423\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SC:/Users/prmat/OneDrive - Ecole Polytechnique/Documents/11_Python/Tout/NPM3D/Project/Fast-Robust-ICP" "-BC:/Users/prmat/OneDrive - Ecole Polytechnique/Documents/11_Python/Tout/NPM3D/Project/Fast-Robust-ICP/build" --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file "C:/Users/prmat/OneDrive - Ecole Polytechnique/Documents/11_Python/Tout/NPM3D/Project/Fast-Robust-ICP/build/FRICP.slnx"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

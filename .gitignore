@@ -1,0 +1,28 @@
+# --- Initial Package & Dependencies ---
+# These files come with the original repository
+include/
+cmake/
+AndersonAcceleration.h
+FRICP.h
+ICP.h
+io_pc.h
+median.h
+Types.h
+CMakeLists.txt
+LICENSE
+README.md
+
+# --- C++ Build ---
+build/
+
+# --- Python & Backups ---
+**/__pycache__/
+.git_backup
+
+# --- Experiment results (Generated) ---
+fricp_experiments/results/
+fricp_experiments/*_gt_transform.txt
+
+# --- Data folder ---
+# Ignore all subdirectories, keeping only the base PLY files
+data/*/

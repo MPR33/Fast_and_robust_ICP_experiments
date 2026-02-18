@@ -9,7 +9,7 @@ median.h
 Types.h
 CMakeLists.txt
 LICENSE
-README.md
+README_AUTHORS.md
 
 # --- C++ Build ---
 build/
@@ -25,6 +25,3 @@ fricp_experiments/*_gt_transform.txt
 # --- Data folder ---
 # Ignore all subdirectories, keeping only the base PLY files
 data/
-
-# --- README.md ---
-!fricp_experiments/README.md

@@ -1,7 +1,7 @@
 import os
 
 # Experiment configurations
-SKIP_EXISTING = True  # If True, won't rerun FRICP if output files exist
+SKIP_EXISTING = False  # If True, won't rerun FRICP if output files exist
 RUN_MIXED_EXPERIMENT = True  # Set to True to run the 2D Noise/Outlier grid
 VERBOSE = True  # If True, prints more debug info during experiments
 

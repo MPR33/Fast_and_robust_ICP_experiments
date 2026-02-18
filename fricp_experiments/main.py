@@ -9,6 +9,7 @@ from fricp.runner import FRICPRunner
 from metrics.transform_error import compute_transform_error, estimate_kabsch
 from metrics.reconstruction import compute_rms, compute_welsch_energy
 from viz.plots import plot_experiment_results, plot_mixed_results
+from viz.convergence import plot_convergence_metrics, plot_iteration_heatmap
 import config
 
 # Seed for reproducibility
@@ -96,6 +97,12 @@ def run_experiment_mixed():
         df, 
         title='Resistance to Mixed Noise & Outliers (Rotation Error)', 
         save_path=os.path.join(config.BASE_CONFIG["output_root"], "mixed_heatmap.png")
+    )
+    
+    plot_iteration_heatmap(
+        df,
+        title='Convergence Efficiency (Total Iterations)',
+        save_path=os.path.join(config.BASE_CONFIG["output_root"], "mixed_convergence_heatmap.png")
     )
     return df
 
@@ -216,6 +223,13 @@ def run_experiment_noise():
         title='Resistance to Noise', 
         save_path=os.path.join(config.BASE_CONFIG["output_root"], "noise_plot.png")
     )
+
+    plot_convergence_metrics(
+        df,
+        x_axis='noise_sigma',
+        title='Convergence Performance vs Noise',
+        save_path=os.path.join(config.BASE_CONFIG["output_root"], "noise_convergence.png")
+    )
     return df
 
 def run_experiment_outliers():
@@ -312,6 +326,13 @@ def run_experiment_outliers():
         x_axis='outlier_ratio', 
         title='Resistance to Outliers', 
         save_path=os.path.join(config.BASE_CONFIG["output_root"], "outlier_plot.png")
+    )
+
+    plot_convergence_metrics(
+        df,
+        x_axis='outlier_ratio',
+        title='Convergence Performance vs Outliers',
+        save_path=os.path.join(config.BASE_CONFIG["output_root"], "outlier_convergence.png")
     )
     return df
 

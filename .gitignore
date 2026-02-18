@@ -3,7 +3,6 @@
 include/
 cmake/
 AndersonAcceleration.h
-ICP.h
 io_pc.h
 median.h
 Types.h

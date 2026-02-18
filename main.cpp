@@ -188,5 +188,10 @@ int main(int argc, char const ** argv)
     std::string file_source_reg = out_path + "reg_pc.ply";
     write_file(file_source, vertices_source, normal_source, src_vert_colors, file_source_reg);
 
+    //--- Write execution stats to stdout for Python parsing
+    std::cout << "STATS: " 
+              << "iters=" << pars.convergence_iter << " "
+              << "energy=" << pars.convergence_energy << std::endl;
+
     return 0;
 }

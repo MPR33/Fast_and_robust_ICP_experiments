@@ -60,9 +60,24 @@ class FRICPRunner:
         else:
             transformation = None
             
+        # Parse stats from stdout
+        iters = np.nan
+        final_energy = np.nan
+        for line in stdout.split('\n'):
+            if "STATS:" in line:
+                try:
+                    parts = line.strip().split()
+                    # Expected: STATS: iters=15 energy=0.00451
+                    iters = int(parts[1].split('=')[1])
+                    final_energy = float(parts[2].split('=')[1])
+                except:
+                    pass
+
         return {
             "time": exec_time,
             "transformation": transformation,
+            "iters": iters,
+            "final_energy": final_energy,
             "stdout": stdout,
             "stderr": stderr
         }

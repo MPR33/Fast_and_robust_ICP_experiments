@@ -75,6 +75,8 @@ def run_experiment_mixed():
                     "outlier_ratio": ratio,
                     "method": method_name,
                     "time": res["time"],
+                    "iters": res["iters"],
+                    "final_energy": res["final_energy"],
                     "rot_err_fricp": rot_err_fricp,
                     "trans_err_fricp": trans_err_fricp
                 })
@@ -189,6 +191,8 @@ def run_experiment_noise():
                 "noise_sigma": sigma,
                 "method": method_name,
                 "time": res["time"],
+                "iters": res["iters"],
+                "final_energy": res["final_energy"],
                 "rot_err_fricp": rot_err_fricp,
                 "trans_err_fricp": trans_err_fricp,
                 "rot_err_kabsch": rot_err_kabsch,
@@ -285,6 +289,8 @@ def run_experiment_outliers():
                 "outlier_ratio": ratio,
                 "method": method_name,
                 "time": res["time"],
+                "iters": res["iters"],
+                "final_energy": res["final_energy"],
                 "rot_err_fricp": rot_err_fricp,
                 "trans_err_fricp": trans_err_fricp,
                 "rot_err_kabsch": rot_err_kabsch,

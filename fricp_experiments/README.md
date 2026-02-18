@@ -9,6 +9,8 @@ If you have just cloned this repository:
 1.  **Build the C++ Core**:
     Ensure you have complied the main project. The framework expects the executable to be located at:
     `build/Release/FRICP.exe` (on Windows) or `build/FRICP` (on Linux, update `config.py` accordingly).
+    
+    > **⚠️ CRITICAL NOTE**: This framework relies on patched versions of `main.cpp` AND `FRICP.h` (included in this repo). You MUST compile using these specific files, as they include fixes for exporting convergence statistics (iterations & energy) that are missing in the original author's code.
 
 2.  **Install Python Dependencies**:
     ```bash

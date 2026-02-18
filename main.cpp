@@ -189,9 +189,20 @@ int main(int argc, char const ** argv)
     write_file(file_source, vertices_source, normal_source, src_vert_colors, file_source_reg);
 
     //--- Write execution stats to stdout for Python parsing
+    int final_iters = 0;
+    double final_energy = 0.0;
+
+    if (method == SparseICP || method == SICPPPL) {
+        final_iters = spars.convergence_iter;
+        final_energy = spars.convergence_mse;
+    } else {
+        final_iters = pars.convergence_iter;
+        final_energy = pars.convergence_energy;
+    }
+
     std::cout << "STATS: " 
-              << "iters=" << pars.convergence_iter << " "
-              << "energy=" << pars.convergence_energy << std::endl;
+              << "iters=" << final_iters << " "
+              << "energy=" << final_energy << std::endl;
 
     return 0;
 }

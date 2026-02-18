@@ -21,16 +21,30 @@ class FRICPRunner:
 
         if skip_if_exists and os.path.exists(trans_file) and os.path.exists(reg_pc_file):
             exec_time = 0.0
+            iters = np.nan
+            final_energy = np.nan
+            
             if os.path.exists(time_file):
                 try:
                     with open(time_file, 'r') as f:
                         exec_time = float(f.read().strip())
                 except: pass
             
+            stats_file = os.path.join(output_dir, f"m{method}stats.txt")
+            if os.path.exists(stats_file):
+                try:
+                    with open(stats_file, 'r') as f:
+                        parts = f.read().strip().split()
+                        iters = int(parts[0])
+                        final_energy = float(parts[1])
+                except: pass
+
             transformation = np.loadtxt(trans_file)
             return {
                 "time": exec_time,
                 "transformation": transformation,
+                "iters": iters,
+                "final_energy": final_energy,
                 "stdout": "Skipped (already exists)",
                 "stderr": ""
             }
@@ -72,6 +86,11 @@ class FRICPRunner:
                     final_energy = float(parts[2].split('=')[1])
                 except:
                     pass
+
+        # Save stats for later skipping
+        stats_file = os.path.join(output_dir, f"m{method}stats.txt")
+        with open(stats_file, 'w') as f:
+            f.write(f"{iters} {final_energy}\n")
 
         return {
             "time": exec_time,

@@ -3,11 +3,10 @@ import numpy as np
 
 def plot_experiment_results(df, x_axis, title, save_path):
     """
-    Plots Rotation Error (FRICP & Kabsch) and RMS for different methods.
-    Saves the plot to save_path.
+    Plots Rotation Error, RMS Error (Comparable), and Execution Time.
     """
     methods = df['method'].unique()
-    fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
     
     # Use a standard color cycle + different markers to help with overlaps
     markers = ['o', 's', '^', 'D', 'v', 'p', '*']
@@ -25,17 +24,23 @@ def plot_experiment_results(df, x_axis, title, save_path):
         x_range = (m_data[x_axis].max() - m_data[x_axis].min()) if len(m_data) > 1 else 1.0
         x_values = m_data[x_axis] + jitter[i] * x_range
 
-        # Plot 1: Rotation Error
-        axes[0].plot(x_values, m_data['rot_err_fricp'], 
-                     marker=marker, color=color, label=f'{method} (FRICP)')
-        if 'rot_err_kabsch' in m_data.columns:
-            axes[0].plot(x_values, m_data['rot_err_kabsch'], 
-                         linestyle='--', marker=marker, fillstyle='none', 
-                         color=color, alpha=0.4, label=f'{method} (Kabsch)')
+        # 1. Rotation Error
+        if 'rot_err_fricp_std' in m_data.columns:
+             axes[0].errorbar(x_values, m_data['rot_err_fricp'], yerr=m_data['rot_err_fricp_std'],
+                              fmt='none', ecolor=color, alpha=0.4, capsize=3)
+        axes[0].plot(x_values, m_data['rot_err_fricp'], marker=marker, color=color, label=f'{method}')
         
-        # Plot 2: RMS
-        axes[1].plot(x_values, m_data['rms'], 
-                     marker=marker, color=color, label=method)
+        # 2. Comparable RMS Error
+        if 'rms_std' in m_data.columns:
+             axes[1].errorbar(x_values, m_data['rms'], yerr=m_data['rms_std'],
+                              fmt='none', ecolor=color, alpha=0.4, capsize=3)
+        axes[1].plot(x_values, m_data['rms'], marker=marker, color=color, label=method)
+        
+        # 3. Execution Time
+        if 'time_std' in m_data.columns:
+             axes[2].errorbar(x_values, m_data['time'], yerr=m_data['time_std'],
+                              fmt='none', ecolor=color, alpha=0.4, capsize=3)
+        axes[2].plot(x_values, m_data['time'], marker=marker, color=color, label=method)
         
         print(f"  - Included in plot: {method}")
 
@@ -45,11 +50,17 @@ def plot_experiment_results(df, x_axis, title, save_path):
     axes[0].grid(True, alpha=0.3)
     axes[0].legend()
 
-    axes[1].set_title('RMS Error')
+    axes[1].set_title('Comparable RMS Error')
     axes[1].set_xlabel(x_axis)
     axes[1].set_ylabel('RMS')
     axes[1].grid(True, alpha=0.3)
     axes[1].legend()
+
+    axes[2].set_title('Execution Time (s)')
+    axes[2].set_xlabel(x_axis)
+    axes[2].set_ylabel('Time (s)')
+    axes[2].grid(True, alpha=0.3)
+    axes[2].legend()
 
     plt.suptitle(title)
     plt.tight_layout()

@@ -19,43 +19,56 @@ If you have just cloned this repository:
 
 3.  **Run Experiments**:
     ```bash
-    python fricp_experiments/main.py
+    python fricp_experiments/main.py --trials 1
     ```
 
-## 📁 Repository Structure
+    To run with multiple trials per condition (e.g., for averaging convergence stats):
+    ```bash
+    python fricp_experiments/main.py --trials 20
+    ```
+
+## 📂 Repository Structure & Configuration
 
 *   **`main.py`**: The entry point. Manages the experiment loops and metric collection.
 *   **`config.py`**: Configuration hub. You can adjust:
-    *   `SKIP_EXISTING`: If `True`, the script won't re-run the C++ binary if results exist. It correctly handles persistent ground truths (see Reproducibility).
-    *   `VERBOSE`: If `True`, prints detailed rotation/translation errors for each run and warns if a method returns an `IDENTITY` matrix.
-    *   `RUN_MIXED_EXPERIMENT`: Set to `True` to enable the 2D stress test.
-...
-*   **`viz/`**: Generates comparative plots. Includes **horizontal jitter** to ensure multiple overlapping curves (e.g., when methods yield identical errors) remain visible.
+    *   `SKIP_EXISTING`: If `True`, the script won't re-run the C++ binary if result files exist. Correctly handles persistent ground truths (see Reproducibility).
+    *   `VERBOSE`: If `True`, prints detailed results for each condition even in multi-trial runs.
+    *   `RUN_MIXED_EXPERIMENT`: Set to `True` (default) to enable the 2D stress test grid (Noise vs Outliers).
+    *   `methods`: List of IDs to test (0: ICP, 3: Robust ICP, 6: Sparse ICP).
+*   **`fricp/runner.py`**: Python wrapper for the C++ executable. Handles stats parsing of `stdout` and caches results.
+*   **`perturb/`**: Contains the logic for adding Gaussian noise, substituting outliers, and applying random rigid transforms.
+*   **`metrics/`**: Implementation of `Rotation Error`, `Translation Error`, `Comparable RMS`, and `Welsch Energy`.
+*   **`viz/`**: Plotting scripts. Generates 1D curves with error bars and 2D heatmaps.
 
-## 🔄 Reproducibility & Stableness
-To solve "drifting" metrics when re-running experiments:
-- **RNG Seeding**: `main.py` uses `np.random.seed(42)` for fixed perturbations.
-- **Persistent Ground Truth**: The ground truth transform used for an experiment is saved as `results/*_gt_transform.txt`. If `SKIP_EXISTING` is used, the script loads this specific matrix to ensure metrics are computed against the correct reference, even if the RNG state changed.
+## 📊 Tracked Metrics & Results Interpretation
 
-## 📊 Understanding the results
+The framework tracks multiple metrics to provide a 360° view of performance. Results include the **Mean** (average performance) and **Standard Deviation** (`_std`, representing stability).
 
-The framework generates plots in the `results/` directory:
-1.  **`noise_plot.png`**: Evaluation under increasing noise.
-2.  **`outlier_plot.png`**: Evaluation under increasing outliers.
-3.  **`mixed_heatmap.png`**: Heatmaps for combined Noise vs Outliers.
+### 1. Performance Metrics (`*_plot.png`)
+*   **Rotation Error (degrees)**: Angular difference between estimate and Ground Truth. 0.0 is perfect.
+*   **Comparable Metric Reference (Dashed Lines)**: In most plots, you will see a **Dashed Line (Kabsch reference)**. This represents the *optimal* registration possible (computed on 100% true inliers with perfect correspondences). It represents the lower-bound error for a given noise level.
+*   **Comparable RMS Error**: Euclidean distance between registered source and target. 
+    *   *Note*: In outlier tests, this is calculated **only on true inliers** for a fair comparison between methods that reject outliers and those that don't.
+*   **Execution Time (s)**: Total CPU time. Vital for comparing **FRICP** vs **Sparse ICP**.
 
-### Why do some curves have jitter?
-If multiple methods fail in the same way (e.g., they all return Identity), they would overlap perfectly. We add a small horizontal jitter to the x-axis values in the plots so you can see that all methods are actually represented.
+### 2. Convergence Metrics (`*_convergence.png`)
+*   **Iterations**: Steps taken until convergence. Faster is better.
+*   **Internal Energy**: Final value of the method's objective function. ⚠️ **Non-comparable** between different ICP types (ICP vs Robust ICP) as they minimize different kernels.
 
-### Why two lines per method?
-- **Solid line (FRICP)**: Error from the matrix exported by the C++.
-- **Dashed line (Kabsch)**: Error from an estimation based on the actual point positions.
+### 📊 Plot Characteristics
+*   **Horizontal Jitter**: If multiple methods have identical errors (e.g., they all fail and return an Identity matrix), they would overlap perfectly. We add a small horizontal shift (jitter) so every method's marker remains visible.
+*   **Error Bars**: Shaded areas or vertical bars show the **Standard Deviation**. Small bars indicate high **stability**; large bars mean the method depends on the luck of the random seed.
 
-## 📁 Data Folder Note
-The top-level `data/` folder contains the base models:
-- **`target.ply`**: The reference model used to generate experiment datasets.
-- **`source.ply`**: Original source model from the project.
-- **`res_*/` directories**: These are typically legacy results from direct C++ executions. For this Python framework, all fresh results are consolidated in `fricp_experiments/results/`.
+## 🔄 Reproducibility & Ground Truths
+
+*   **Persistent Ground Truth**: Ground truth transforms are saved as `*_gt_transform.txt` in `results/`. 
+    *   **If `--trials 1`**: The script loads these files to ensure you always test against the *exact same* perturbation, even if you restart the script.
+    *   **If `--trials > N`**: The script generates new, seed-controlled transforms per trial for statistical significance.
+*   **RNG Seeding**: `main.py` uses fixed seeds per condition (`42 + index`) to ensure data generation is deterministic.
+
+### 3. Mixed Grid Analysis (Heatmaps)
+*   **`mixed_heatmap.png`**: Displays Rotation Error across a 2D grid of Noise Sigma and Outlier Ratio. This identifies the "breakdown point" where algorithms start to fail.
+*   **`mixed_convergence_heatmap.png`**: Shows how computational effort (iterations) increases as the environment becomes more challenging.
 
 ## 👁️ Visual Validation
-Point clouds are saved in `results/`. Open `target.ply` and `mXreg_pc.ply` in **CloudCompare** to visually inspect the alignment.
+Open `target.ply` and `method_X/mXreg_pc.ply` in **CloudCompare** to visually inspect alignment quality. Results are organized in folders named after the perturbation (e.g., `noise_0.02_t0/`).

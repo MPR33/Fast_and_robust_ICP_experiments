@@ -40,4 +40,8 @@ def substitute_outliers(vertices, normals, ratio=0.1, box_scale=1.5):
     new_normals = normals.copy()
     new_vertices[indices] = outliers
     new_normals[indices] = outlier_normals
-    return new_vertices, new_normals
+    
+    inlier_mask = np.ones(len(vertices), dtype=bool)
+    inlier_mask[indices] = False
+    
+    return new_vertices, new_normals, inlier_mask

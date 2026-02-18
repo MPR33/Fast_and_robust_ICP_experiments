@@ -26,11 +26,18 @@ def plot_convergence_metrics(df, x_axis, title, save_path):
         x_values = m_data[x_axis] + jitter[i] * x_range
 
         # Plot 1: Iterations
+        if 'iters_std' in m_data.columns:
+            axes[0].errorbar(x_values, m_data['iters'], yerr=m_data['iters_std'],
+                             fmt='none', ecolor=color, alpha=0.5, capsize=3)
         axes[0].plot(x_values, m_data['iters'], 
                      marker=marker, color=color, label=method)
         
         # Plot 2: Final Energy (using log scale if values vary widely)
-        energy_vals = m_data['final_energy'].replace(0, np.nan) # Avoid log(0)
+        # We clarify that this is the internal objective function energy
+        energy_vals = m_data['final_energy'].replace(0, np.nan)
+        if 'final_energy_std' in m_data.columns:
+             axes[1].errorbar(x_values, energy_vals, yerr=m_data['final_energy_std'],
+                              fmt='none', ecolor=color, alpha=0.4, capsize=3)
         axes[1].plot(x_values, energy_vals, 
                      marker=marker, color=color, label=method)
         
@@ -40,7 +47,7 @@ def plot_convergence_metrics(df, x_axis, title, save_path):
     axes[0].grid(True, alpha=0.3)
     axes[0].legend()
 
-    axes[1].set_title('Final Objective Function Energy')
+    axes[1].set_title('Internal Objective Energy (Method-Specific)')
     axes[1].set_xlabel(x_axis)
     axes[1].set_ylabel('Energy')
     axes[1].set_yscale('log')

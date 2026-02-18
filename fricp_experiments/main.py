@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import pandas as pd
+import argparse
 from io_pc.ply import read_ply, write_ply
 from perturb.noise import add_gaussian_noise
 from perturb.outliers import substitute_outliers
@@ -12,11 +13,16 @@ from viz.plots import plot_experiment_results, plot_mixed_results
 from viz.convergence import plot_convergence_metrics, plot_iteration_heatmap
 import config
 
-# Seed for reproducibility
+# Seed for reproducibility - will be reset per trial if needed
 np.random.seed(42)
 
-def run_experiment_mixed():
-    print("\n--- Starting Mixed (Noise + Outliers) Experiment ---")
+def get_args():
+    parser = argparse.ArgumentParser(description="Run FRICP Experiments")
+    parser.add_argument("--trials", type=int, default=1, help="Number of trials per condition (default: 1)")
+    return parser.parse_args()
+
+def run_experiment_mixed(n_trials=1):
+    print(f"\n--- Starting Mixed (Noise + Outliers) Experiment ({n_trials} trials) ---")
     target_xyz, target_nor = read_ply(config.BASE_CONFIG["data_path"])
     runner = FRICPRunner(config.BASE_CONFIG["exe_path"])
     results = []
@@ -46,50 +52,95 @@ def run_experiment_mixed():
     for sigma in config.noise_grid_mixed:
         for ratio in config.outlier_grid_mixed:
             current_iter += 1
-            print(f"  Combination {current_iter}/{total_iters}: sigma={sigma}, outliers={ratio}")
+            print(f"  Combination {current_iter}/{total_iters}: sigma={sigma}, outliers={ratio*100}%")
             
-            # 1. Perturb
-            source_init_xyz, source_init_nor = apply_transform(target_xyz, R_gt, t_gt, target_nor)
-            # Add outliers first then noise? Or vice versa. Order matters but usually outliers replace, then noise on top.
-            source_perturbed_xyz, source_perturbed_nor = substitute_outliers(source_init_xyz, source_init_nor, ratio=ratio)
-            source_perturbed_xyz, source_perturbed_nor = add_gaussian_noise(source_perturbed_xyz, source_perturbed_nor, sigma=sigma)
+            metrics_sum = {m: {"time": [], "iters": [], "final_energy": [], "rot_err_fricp": [], "trans_err_fricp": [], "rot_err_kabsch": [], "rms": [], "energy": []} for m in config.methods}
             
-            # 2. Save
-            work_dir = os.path.join(config.BASE_CONFIG["output_root"], f"mixed_s{sigma}_r{ratio}")
-            if not os.path.exists(work_dir): os.makedirs(work_dir)
-            
-            target_path = os.path.join(work_dir, "target.ply")
-            source_path = os.path.join(work_dir, "source.ply")
-            write_ply(target_path, target_xyz, target_nor)
-            write_ply(source_path, source_perturbed_xyz, source_perturbed_nor)
-            
+            for trial in range(n_trials):
+                if n_trials > 1:
+                    # New random transform per trial for statistical significance
+                    seed = 42 + int(ratio*1000) + int(sigma*10000) + trial
+                    np.random.seed(seed)
+                    R_trial = get_random_rotation(max_angle_deg=15)
+                    t_trial = get_random_translation(max_dist=0.1)
+                    T_trial_inv = np.eye(4)
+                    T_trial_inv[:3, :3], T_trial_inv[:3, 3] = R_trial, t_trial
+                    T_curr = np.linalg.inv(T_trial_inv)
+                    R_curr, t_curr = R_trial, t_trial
+                else:
+                    # Persistent single transformation for reproducibility/visual comparison
+                    R_curr, t_curr, T_curr = R_gt, t_gt, T_gt
+
+                # 1. Perturb
+                source_init_xyz, source_init_nor = apply_transform(target_xyz, R_curr, t_curr, target_nor)
+                source_perturbed_xyz, source_perturbed_nor, inlier_mask = substitute_outliers(source_init_xyz, source_init_nor, ratio=ratio)
+                source_perturbed_xyz, source_perturbed_nor = add_gaussian_noise(source_perturbed_xyz, source_perturbed_nor, sigma=sigma)
+                
+                # 2. Save
+                work_dir = os.path.join(config.BASE_CONFIG["output_root"], f"mixed_s{sigma}_r{ratio}_t{trial}")
+                if not os.path.exists(work_dir): os.makedirs(work_dir)
+                
+                target_path = os.path.join(work_dir, "target.ply")
+                source_path = os.path.join(work_dir, "source.ply")
+                write_ply(target_path, target_xyz, target_nor)
+                write_ply(source_path, source_perturbed_xyz, source_perturbed_nor)
+                
+                for m in config.methods:
+                    method_name = config.method_names.get(m, f"Method_{m}")
+                    res_dir = os.path.join(work_dir, f"method_{m}")
+                    
+                    skip_if_exists = config.SKIP_EXISTING if n_trials == 1 else False
+                    res = runner.run(target_path, source_path, res_dir, method=m, skip_if_exists=skip_if_exists)
+                    
+                    T_fricp = res["transformation"]
+                    rot_err_fricp, trans_err_fricp = compute_transform_error(T_fricp, T_curr)
+                    
+                    # Optimal registration on inliers only (reference lower bound)
+                    T_kabsch = estimate_kabsch(source_perturbed_xyz[inlier_mask], target_xyz[inlier_mask])
+                    rot_err_kabsch, _ = compute_transform_error(T_kabsch, T_curr)
+
+                    metrics_sum[m]["time"].append(res["time"])
+                    metrics_sum[m]["iters"].append(res["iters"] if not np.isnan(res["iters"]) else 0)
+                    metrics_sum[m]["rot_err_fricp"].append(rot_err_fricp)
+                    metrics_sum[m]["trans_err_fricp"].append(trans_err_fricp)
+                    metrics_sum[m]["rot_err_kabsch"].append(rot_err_kabsch)
+                    metrics_sum[m]["final_energy"].append(res["final_energy"] if not np.isnan(res["final_energy"]) else 0)
+                    
+                    # Add comparable metrics for Mixed too
+                    reg_path = os.path.join(res_dir, f"m{m}reg_pc.ply")
+                    if os.path.exists(reg_path):
+                        source_reg_xyz, _ = read_ply(reg_path)
+                        source_reg_xyz_clean = source_reg_xyz[inlier_mask]
+                        metrics_sum[m]["rms"].append(compute_rms(source_reg_xyz_clean, target_xyz[inlier_mask]))
+                        metrics_sum[m]["energy"].append(compute_welsch_energy(source_reg_xyz_clean, target_xyz[inlier_mask]))
+                    else:
+                        metrics_sum[m]["rms"].append(np.nan)
+                        metrics_sum[m]["energy"].append(np.nan)
+
+                    if n_trials == 1 and config.VERBOSE:
+                         print(f"      [DEBUG] {method_name}: rot_err={rot_err_fricp:.2f}, trans_err={trans_err_fricp:.4f}")
+                         if T_fricp is not None and np.allclose(T_fricp, np.eye(4), atol=1e-5):
+                              print(f"      [WARNING] {method_name} returned IDENTITY matrix.")
+
+            # Average and append
+            # Average and append
             for m in config.methods:
                 method_name = config.method_names.get(m, f"Method_{m}")
-                res_dir = os.path.join(work_dir, f"method_{m}")
-                res = runner.run(target_path, source_path, res_dir, method=m, skip_if_exists=config.SKIP_EXISTING)
                 
-                T_fricp = res["transformation"]
-                rot_err_fricp, trans_err_fricp = compute_transform_error(T_fricp, T_gt)
+                # Calculate mean and std for all metrics
+                stats = {}
+                for k, v in metrics_sum[m].items():
+                    stats[k] = np.mean(v)
+                    stats[f"{k}_std"] = np.std(v)
                 
-                results.append({
+                res_item = {
                     "noise_sigma": sigma,
                     "outlier_ratio": ratio,
-                    "method": method_name,
-                    "time": res["time"],
-                    "iters": res["iters"],
-                    "final_energy": res["final_energy"],
-                    "rot_err_fricp": rot_err_fricp,
-                    "trans_err_fricp": trans_err_fricp
-                })
-
-                if config.VERBOSE:
-                    print(f"      [DEBUG] {method_name}: rot_err={rot_err_fricp:.2f}, trans_err={trans_err_fricp:.4f}")
-                    if T_fricp is not None:
-                        # Print if it's potentially Identity
-                        is_identity = np.allclose(T_fricp, np.eye(4), atol=1e-5)
-                        if is_identity:
-                            print(f"      [WARNING] {method_name} returned IDENTITY matrix.")
-
+                    "method": method_name
+                }
+                res_item.update(stats)
+                results.append(res_item)
+                
     df = pd.DataFrame(results)
     df.to_csv(os.path.join(config.BASE_CONFIG["output_root"], "mixed_results.csv"), index=False)
     
@@ -106,8 +157,8 @@ def run_experiment_mixed():
     )
     return df
 
-def run_experiment_noise():
-    print("--- Starting Noise Resistance Experiment ---")
+def run_experiment_noise(n_trials=1):
+    print(f"--- Starting Noise Resistance Experiment ({n_trials} trials) ---")
     target_xyz, target_nor = read_ply(config.BASE_CONFIG["data_path"])
     runner = FRICPRunner(config.BASE_CONFIG["exe_path"])
     results = []
@@ -135,84 +186,105 @@ def run_experiment_noise():
     for sigma in config.noise_grid:
         print(f"  Testing noise sigma: {sigma}")
         
-        # 1. Perturb
-        source_init_xyz, source_init_nor = apply_transform(target_xyz, R_gt, t_gt, target_nor)
-        source_perturbed_xyz, source_perturbed_nor = add_gaussian_noise(source_init_xyz, source_init_nor, sigma=sigma)
+        metrics_sum = {m: {"time": [], "iters": [], "final_energy": [], "rot_err_fricp": [], "trans_err_fricp": [], "rot_err_kabsch": [], "trans_err_kabsch": [], "matrix_verify_err": [], "rms": [], "energy": []} for m in config.methods}
         
-        # 2. Save
-        work_dir = os.path.join(config.BASE_CONFIG["output_root"], f"noise_{sigma}")
-        if not os.path.exists(work_dir): os.makedirs(work_dir)
-        
-        target_path = os.path.join(work_dir, "target.ply")
-        source_path = os.path.join(work_dir, "source.ply")
-        write_ply(target_path, target_xyz, target_nor)
-        write_ply(source_path, source_perturbed_xyz, source_perturbed_nor)
-        
-        for m in config.methods:
-            method_name = config.method_names.get(m, f"Method_{m}")
-            
-            res_dir = os.path.join(work_dir, f"method_{m}")
-            res = runner.run(target_path, source_path, res_dir, method=m, skip_if_exists=config.SKIP_EXISTING)
-            
-            if "Skipped" in res["stdout"]:
-                print(f"    - {method_name}: [LOADED]")
+        for trial in range(n_trials):
+            if n_trials > 1:
+                seed = 42 + int(sigma*10000) + trial
+                np.random.seed(seed)
+                R_trial = get_random_rotation(max_angle_deg=15)
+                t_trial = get_random_translation(max_dist=0.1)
+                T_trial_inv = np.eye(4)
+                T_trial_inv[:3, :3], T_trial_inv[:3, 3] = R_trial, t_trial
+                T_curr = np.linalg.inv(T_trial_inv)
+                R_curr, t_curr = R_trial, t_trial
             else:
-                print(f"    - {method_name}: [DONE] ({res['time']:.2f}s)")
+                R_curr, t_curr, T_curr = R_gt, t_gt, T_gt
             
-            # Read registered points to compute Kabsch
-            reg_path = os.path.join(res_dir, "m3reg_pc.ply") # FRICP always uses m3 prefix or method?
-            # Actually runner.py should probably handle the prefix. 
-            # In runner.py I used f"m{method}reg_pc.ply"? Let's check runner.
-            reg_path = os.path.join(res_dir, f"m{m}reg_pc.ply")
+            source_init_xyz, source_init_nor = apply_transform(target_xyz, R_curr, t_curr, target_nor)
+            source_perturbed_xyz, source_perturbed_nor = add_gaussian_noise(source_init_xyz, source_init_nor, sigma=sigma)
             
-            T_fricp = res["transformation"]
-            T_kabsch = None
+            work_dir = os.path.join(config.BASE_CONFIG["output_root"], f"noise_{sigma}_t{trial}")
+            if not os.path.exists(work_dir): os.makedirs(work_dir)
             
-            if os.path.exists(reg_path):
-                source_reg_xyz, _ = read_ply(reg_path)
-                # (i) & (ii) Kabsch between perturbed source and target using GT correspondences
-                # Since we know source_perturbed[i] corresponds to target_xyz[i]
-                T_kabsch = estimate_kabsch(source_perturbed_xyz, target_xyz)
+            target_path = os.path.join(work_dir, "target.ply")
+            source_path = os.path.join(work_dir, "source.ply")
+            write_ply(target_path, target_xyz, target_nor)
+            write_ply(source_path, source_perturbed_xyz, source_perturbed_nor)
+            
+            skip_if_exists = config.SKIP_EXISTING if n_trials == 1 else False
+            
+            for m in config.methods:
+                if n_trials == 1:
+                     method_name = config.method_names.get(m, f"Method_{m}")
+                     # Print status only for single trial to avoid spam
+                     pass
+
+                res_dir = os.path.join(work_dir, f"method_{m}")
+                res = runner.run(target_path, source_path, res_dir, method=m, skip_if_exists=skip_if_exists)
                 
-                # Also Kabsch between source_perturbed and source_reg to verify the file matrix
-                T_fricp_verify = estimate_kabsch(source_perturbed_xyz, source_reg_xyz)
-            else:
-                source_reg_xyz = None
-                T_fricp_verify = None
+                if n_trials == 1:
+                     if "Skipped" in res["stdout"]:
+                          print(f"    - {config.method_names.get(m)}: [LOADED]")
+                     else:
+                          print(f"    - {config.method_names.get(m)}: [DONE] ({res['time']:.2f}s)")
 
-            # 3. Metrics
-            rot_err_fricp, trans_err_fricp = compute_transform_error(T_fricp, T_gt)
-            rot_err_kabsch, trans_err_kabsch = compute_transform_error(T_kabsch, T_gt)
-            
-            # Check if matrix in file matches actual points
-            rot_err_verify, _ = compute_transform_error(T_fricp, T_fricp_verify)
-            
-            if source_reg_xyz is not None:
-                rms = compute_rms(source_reg_xyz, target_xyz) # Brute RMS (no correspondence)
-                # Energy with correspondence (more precise for validation)
-                energy = compute_welsch_energy(source_reg_xyz, target_xyz)
-            else:
-                rms, energy = np.nan, np.nan
-            
-            results.append({
-                "noise_sigma": sigma,
-                "method": method_name,
-                "time": res["time"],
-                "iters": res["iters"],
-                "final_energy": res["final_energy"],
-                "rot_err_fricp": rot_err_fricp,
-                "trans_err_fricp": trans_err_fricp,
-                "rot_err_kabsch": rot_err_kabsch,
-                "trans_err_kabsch": trans_err_kabsch,
-                "matrix_verify_err": rot_err_verify,
-                "rms": rms,
-                "energy": energy
-            })
+                reg_path = os.path.join(res_dir, f"m{m}reg_pc.ply")
+                T_fricp = res["transformation"]
+                T_kabsch = None
+                
+                if os.path.exists(reg_path):
+                    source_reg_xyz, _ = read_ply(reg_path)
+                    T_kabsch = estimate_kabsch(source_perturbed_xyz, target_xyz)
+                    T_fricp_verify = estimate_kabsch(source_perturbed_xyz, source_reg_xyz)
+                else:
+                    source_reg_xyz = None
+                    T_fricp_verify = None
 
-            if config.VERBOSE:
-                print(f"      [DEBUG] {method_name}: rot_err={rot_err_fricp:.2f} (Kabsch={rot_err_kabsch:.2f}), verify_err={rot_err_verify:.4f}")
-                if T_fricp is not None and np.allclose(T_fricp, np.eye(4), atol=1e-5):
-                    print(f"      [WARNING] {method_name} returned IDENTITY matrix.")
+                rot_err_fricp, trans_err_fricp = compute_transform_error(T_fricp, T_curr)
+                rot_err_kabsch, trans_err_kabsch = compute_transform_error(T_kabsch, T_curr)
+                rot_err_verify, _ = compute_transform_error(T_fricp, T_fricp_verify)
+                
+                if source_reg_xyz is not None:
+                     rms = compute_rms(source_reg_xyz, target_xyz)
+                     energy = compute_welsch_energy(source_reg_xyz, target_xyz)
+                else:
+                     rms, energy = np.nan, np.nan
+                
+                metrics_sum[m]["time"].append(res["time"])
+                metrics_sum[m]["iters"].append(res["iters"] if not np.isnan(res["iters"]) else 0)
+                metrics_sum[m]["final_energy"].append(res["final_energy"] if not np.isnan(res["final_energy"]) else 0)
+                metrics_sum[m]["rot_err_fricp"].append(rot_err_fricp)
+                metrics_sum[m]["trans_err_fricp"].append(trans_err_fricp)
+                metrics_sum[m]["rot_err_kabsch"].append(rot_err_kabsch if T_kabsch is not None else 0)
+                metrics_sum[m]["trans_err_kabsch"].append(trans_err_kabsch if T_kabsch is not None else 0)
+                metrics_sum[m]["matrix_verify_err"].append(rot_err_verify if source_reg_xyz is not None else 0)
+                metrics_sum[m]["rms"].append(rms if not np.isnan(rms) else 0)
+                metrics_sum[m]["energy"].append(energy if not np.isnan(energy) else 0)
+
+                if n_trials == 1 and config.VERBOSE:
+                     print(f"      [DEBUG] {method_name}: rot_err={rot_err_fricp:.2f} (Kabsch={rot_err_kabsch:.2f}), verify_err={rot_err_verify:.4f}")
+                     if T_fricp is not None and np.allclose(T_fricp, np.eye(4), atol=1e-5):
+                          print(f"      [WARNING] {method_name} returned IDENTITY matrix.")
+
+        # Average and append
+            # Average and append
+            for m in config.methods:
+                method_name = config.method_names.get(m, f"Method_{m}")
+                
+                 # Calculate mean and std for all metrics
+                stats = {}
+                for k, v in metrics_sum[m].items():
+                    stats[k] = np.mean(v)
+                    stats[f"{k}_std"] = np.std(v)
+                
+                res_item = {
+                    "noise_sigma": sigma,
+                    "method": method_name
+                }
+                res_item.update(stats)
+                results.append(res_item)
+
 
     df = pd.DataFrame(results)
     df.to_csv(os.path.join(config.BASE_CONFIG["output_root"], "noise_results.csv"), index=False)
@@ -232,8 +304,8 @@ def run_experiment_noise():
     )
     return df
 
-def run_experiment_outliers():
-    print("\n--- Starting Outlier Resistance Experiment ---")
+def run_experiment_outliers(n_trials=1):
+    print(f"\n--- Starting Outlier Resistance Experiment ({n_trials} trials) ---")
     target_xyz, target_nor = read_ply(config.BASE_CONFIG["data_path"])
     runner = FRICPRunner(config.BASE_CONFIG["exe_path"])
     results = []
@@ -245,78 +317,109 @@ def run_experiment_outliers():
         R_gt = T_gt_inv[:3, :3]
         t_gt = T_gt_inv[:3, 3]
     else:
-        R_gt = get_random_rotation(max_angle_deg=10)
-        t_gt = get_random_translation(max_dist=0.05)
+        # Use same max angle/dist as in report for consistency
+        R_gt = get_random_rotation(max_angle_deg=15)
+        t_gt = get_random_translation(max_dist=0.1)
         T_gt_inv = np.eye(4)
-        T_gt_inv[:3, :3] = R_gt
-        T_gt_inv[:3, 3] = t_gt
+        T_gt_inv[:3, :3], T_gt_inv[:3, 3] = R_gt, t_gt
         T_gt = np.linalg.inv(T_gt_inv)
+        if not os.path.exists(config.BASE_CONFIG["output_root"]): os.makedirs(config.BASE_CONFIG["output_root"])
         np.savetxt(T_gt_path, T_gt)
 
     for ratio in config.outlier_grid:
-        print(f"  Testing outlier ratio: {ratio}")
+        print(f"  Testing outlier ratio: {ratio*100}%")
         
-        # 1. Perturb
-        source_init_xyz, source_init_nor = apply_transform(target_xyz, R_gt, t_gt, target_nor)
-        source_perturbed_xyz, source_perturbed_nor = substitute_outliers(source_init_xyz, source_init_nor, ratio=ratio)
+        metrics_sum = {m: {"time": [], "iters": [], "final_energy": [], "rot_err_fricp": [], "trans_err_fricp": [], "rot_err_kabsch": [], "trans_err_kabsch": [], "rms": [], "energy": []} for m in config.methods}
         
-        # 2. Save
-        work_dir = os.path.join(config.BASE_CONFIG["output_root"], f"outliers_{ratio}")
-        if not os.path.exists(work_dir): os.makedirs(work_dir)
-        
-        target_path = os.path.join(work_dir, "target.ply")
-        source_path = os.path.join(work_dir, "source.ply")
-        write_ply(target_path, target_xyz, target_nor)
-        write_ply(source_path, source_perturbed_xyz, source_perturbed_nor)
-        
-        for m in config.methods:
-            method_name = config.method_names.get(m, f"Method_{m}")
-            
-            res_dir = os.path.join(work_dir, f"method_{m}")
-            res = runner.run(target_path, source_path, res_dir, method=m, skip_if_exists=config.SKIP_EXISTING)
-            
-            if "Skipped" in res["stdout"]:
-                print(f"    - {method_name}: [LOADED]")
+        for trial in range(n_trials):
+            if n_trials > 1:
+                seed = 42 + int(ratio*1000) + trial
+                np.random.seed(seed)
+                R_trial = get_random_rotation(max_angle_deg=15)
+                t_trial = get_random_translation(max_dist=0.1)
+                T_trial_inv = np.eye(4)
+                T_trial_inv[:3, :3], T_trial_inv[:3, 3] = R_trial, t_trial
+                T_curr = np.linalg.inv(T_trial_inv)
+                R_curr, t_curr = R_trial, t_trial
             else:
-                print(f"    - {method_name}: [DONE] ({res['time']:.2f}s)")
+                R_curr, t_curr, T_curr = R_gt, t_gt, T_gt
             
-            reg_path = os.path.join(res_dir, f"m{m}reg_pc.ply")
-            T_fricp = res["transformation"]
-            T_kabsch = None
+            source_init_xyz, source_init_nor = apply_transform(target_xyz, R_curr, t_curr, target_nor)
+            source_perturbed_xyz, source_perturbed_nor, inlier_mask = substitute_outliers(source_init_xyz, source_init_nor, ratio=ratio)
             
-            if os.path.exists(reg_path):
-                source_reg_xyz, _ = read_ply(reg_path)
-                # For outliers, use only the original (non-outlier) points for Kabsch/Metrics
-                n_original = len(target_xyz)
-                T_kabsch = estimate_kabsch(source_perturbed_xyz[:n_original], target_xyz)
-                source_reg_xyz_clean = source_reg_xyz[:n_original]
-                rms = compute_rms(source_reg_xyz_clean, target_xyz)
-                energy = compute_welsch_energy(source_reg_xyz_clean, target_xyz)
-            else:
-                source_reg_xyz = None
-                rms, energy = np.nan, np.nan
+            work_dir = os.path.join(config.BASE_CONFIG["output_root"], f"outliers_{ratio}_t{trial}")
+            if not os.path.exists(work_dir): os.makedirs(work_dir)
             
-            rot_err_fricp, trans_err_fricp = compute_transform_error(T_fricp, T_gt)
-            rot_err_kabsch, trans_err_kabsch = compute_transform_error(T_kabsch, T_gt)
+            target_path = os.path.join(work_dir, "target.ply")
+            source_path = os.path.join(work_dir, "source.ply")
+            write_ply(target_path, target_xyz, target_nor)
+            write_ply(source_path, source_perturbed_xyz, source_perturbed_nor)
             
-            results.append({
-                "outlier_ratio": ratio,
-                "method": method_name,
-                "time": res["time"],
-                "iters": res["iters"],
-                "final_energy": res["final_energy"],
-                "rot_err_fricp": rot_err_fricp,
-                "trans_err_fricp": trans_err_fricp,
-                "rot_err_kabsch": rot_err_kabsch,
-                "trans_err_kabsch": trans_err_kabsch,
-                "rms": rms,
-                "energy": energy
-            })
+            skip_if_exists = config.SKIP_EXISTING if n_trials == 1 else False
+            
+            for m in config.methods:
+                if n_trials == 1:
+                     method_name = config.method_names.get(m, f"Method_{m}")
 
-            if config.VERBOSE:
-                print(f"      [DEBUG] {method_name}: rot_err={rot_err_fricp:.2f} (Kabsch={rot_err_kabsch:.2f})")
-                if T_fricp is not None and np.allclose(T_fricp, np.eye(4), atol=1e-5):
-                    print(f"      [WARNING] {method_name} returned IDENTITY matrix.")
+                res_dir = os.path.join(work_dir, f"method_{m}")
+                res = runner.run(target_path, source_path, res_dir, method=m, skip_if_exists=skip_if_exists)
+                
+                if n_trials == 1:
+                     if "Skipped" in res["stdout"]:
+                          print(f"    - {config.method_names.get(m)}: [LOADED]")
+                     else:
+                          print(f"    - {config.method_names.get(m)}: [DONE] ({res['time']:.2f}s)")
+
+                reg_path = os.path.join(res_dir, f"m{m}reg_pc.ply")
+                T_fricp = res["transformation"]
+                T_kabsch = None
+                
+                if os.path.exists(reg_path):
+                    source_reg_xyz, _ = read_ply(reg_path)
+                    # For outliers, use only the original inlier points for Kabsch/Metrics
+                    T_kabsch = estimate_kabsch(source_perturbed_xyz[inlier_mask], target_xyz[inlier_mask])
+                    source_reg_xyz_clean = source_reg_xyz[inlier_mask]
+                    rms = compute_rms(source_reg_xyz_clean, target_xyz[inlier_mask])
+                    energy = compute_welsch_energy(source_reg_xyz_clean, target_xyz[inlier_mask])
+                else:
+                    source_reg_xyz = None
+                    rms, energy = np.nan, np.nan
+                
+                rot_err_fricp, trans_err_fricp = compute_transform_error(T_fricp, T_curr)
+                rot_err_kabsch, trans_err_kabsch = compute_transform_error(T_kabsch, T_curr)
+                
+                metrics_sum[m]["time"].append(res["time"])
+                metrics_sum[m]["iters"].append(res["iters"] if not np.isnan(res["iters"]) else 0)
+                metrics_sum[m]["final_energy"].append(res["final_energy"] if not np.isnan(res["final_energy"]) else 0)
+                metrics_sum[m]["rot_err_fricp"].append(rot_err_fricp)
+                metrics_sum[m]["trans_err_fricp"].append(trans_err_fricp)
+                metrics_sum[m]["rot_err_kabsch"].append(rot_err_kabsch if T_kabsch is not None else 0)
+                metrics_sum[m]["trans_err_kabsch"].append(trans_err_kabsch if T_kabsch is not None else 0)
+                metrics_sum[m]["rms"].append(rms if not np.isnan(rms) else 0)
+                metrics_sum[m]["energy"].append(energy if not np.isnan(energy) else 0)
+
+                if n_trials == 1 and config.VERBOSE:
+                     print(f"      [DEBUG] {method_name}: rot_err={rot_err_fricp:.2f} (Kabsch={rot_err_kabsch:.2f})")
+                     if T_fricp is not None and np.allclose(T_fricp, np.eye(4), atol=1e-5):
+                          print(f"      [WARNING] {method_name} returned IDENTITY matrix.")
+
+        # Average and append
+            # Average and append
+            for m in config.methods:
+                method_name = config.method_names.get(m, f"Method_{m}")
+                
+                 # Calculate mean and std for all metrics
+                stats = {}
+                for k, v in metrics_sum[m].items():
+                    stats[k] = np.mean(v)
+                    stats[f"{k}_std"] = np.std(v)
+                
+                res_item = {
+                    "outlier_ratio": ratio,
+                    "method": method_name
+                }
+                res_item.update(stats)
+                results.append(res_item)
 
     df = pd.DataFrame(results)
     df.to_csv(os.path.join(config.BASE_CONFIG["output_root"], "outlier_results.csv"), index=False)
@@ -337,12 +440,13 @@ def run_experiment_outliers():
     return df
 
 if __name__ == "__main__":
+    args = get_args()
     if not os.path.exists(config.BASE_CONFIG["output_root"]):
         os.makedirs(config.BASE_CONFIG["output_root"])
     
-    df_noise = run_experiment_noise()
-    df_outliers = run_experiment_outliers()
+    df_noise = run_experiment_noise(n_trials=args.trials)
+    df_outliers = run_experiment_outliers(n_trials=args.trials)
 
     if config.RUN_MIXED_EXPERIMENT:
-        df_mixed = run_experiment_mixed()
+        df_mixed = run_experiment_mixed(n_trials=args.trials)
         

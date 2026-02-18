@@ -1,7 +1,7 @@
 import os
 
 # Experiment configurations
-SKIP_EXISTING = False  # If True, won't rerun FRICP if output files exist
+SKIP_EXISTING = True  # If True, won't rerun FRICP if output files exist
 RUN_MIXED_EXPERIMENT = True  # Set to True to run the 2D Noise/Outlier grid
 VERBOSE = True  # If True, prints more debug info during experiments
 
@@ -28,7 +28,7 @@ outlier_grid_mixed = [0.0, 0.1, 0.3, 0.5]
 
 # Methods to test
 # 0: ICP, 1: AA-ICP, 2: Fast ICP, 3: Robust ICP, 4: ICP P2Pl
-methods = [0, 2, 3]
+methods = [0, 3, 6] # Standard ICP (0), Robust ICP (3), and Sparse ICP (6)
 method_names = {
     0: "Standard ICP",
     1: "AA-ICP",

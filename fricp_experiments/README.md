@@ -63,7 +63,7 @@ The framework tracks multiple metrics to provide a 360° view of performance. Re
 
 *   **Persistent Ground Truth**: Ground truth transforms are saved as `*_gt_transform.txt` in `results/`. 
     *   **If `--trials 1`**: The script loads these files to ensure you always test against the *exact same* perturbation, even if you restart the script.
-    *   **If `--trials > N`**: The script generates new, seed-controlled transforms per trial for statistical significance.
+    *   **If `--trials N`, N>1**: The script generates new, seed-controlled transforms per trial for statistical significance.
 *   **RNG Seeding**: `main.py` uses fixed seeds per condition (`42 + index`) to ensure data generation is deterministic.
 
 ### 3. Mixed Grid Analysis (Heatmaps)

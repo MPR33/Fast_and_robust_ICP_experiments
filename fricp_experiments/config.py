@@ -1,9 +1,9 @@
 import os
 
-# Experiment configurations
-SKIP_EXISTING = False  # If True, won't rerun FRICP if output files exist
-RUN_MIXED_EXPERIMENT = True  # Set to True to run the 2D Noise/Outlier grid
-VERBOSE = True  # If True, prints more debug info during experiments
+# Global toggles
+SKIP_EXISTING = False  # Set to True to avoid re-running solvers if output exists
+RUN_MIXED_EXPERIMENT = True  # Enable/Disable the 2D sweep
+VERBOSE = True  # Print extra error tracking
 
 # Get the directory of the current script (config.py)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

@@ -13,36 +13,34 @@ from viz.plots import plot_experiment_results, plot_mixed_results
 from viz.convergence import plot_convergence_metrics, plot_iteration_heatmap
 import config
 
-# Seed for reproducibility - will be reset per trial if needed
+# Seed for reproducibility - reset per trial in the loops
 np.random.seed(42)
 
 def get_args():
-    parser = argparse.ArgumentParser(description="Run FRICP Experiments")
-    parser.add_argument("--trials", type=int, default=1, help="Number of trials per condition (default: 1)")
+    parser = argparse.ArgumentParser(description="FRICP Benchmark Suite")
+    parser.add_argument("--trials", type=int, default=1, help="Number of trials per point (set to 20 for paper results)")
     return parser.parse_args()
 
 def run_experiment_mixed(n_trials=1):
-    print(f"\n--- Starting Mixed (Noise + Outliers) Experiment ({n_trials} trials) ---")
+    print(f"\n--- Mixed Stress Test: Noise + Outliers ({n_trials} trials) ---")
     target_xyz, target_nor = read_ply(config.BASE_CONFIG["data_path"])
     runner = FRICPRunner(config.BASE_CONFIG["exe_path"])
     results = []
 
     T_gt_path = os.path.join(config.BASE_CONFIG["output_root"], "mixed_gt_transform.txt")
+    
+    # Handle ground truth: load existing if single run, or generate per trial
     if config.SKIP_EXISTING and os.path.exists(T_gt_path):
         T_gt = np.loadtxt(T_gt_path)
-        R_gt = T_gt[:3, :3] # This is actually T_gt_inv in the logic below, let's be careful
-        # Wait, the logic below uses R_gt, t_gt as the perturbation (target -> source)
-        # and T_gt as source -> target.
         T_gt_inv = np.linalg.inv(T_gt)
         R_gt = T_gt_inv[:3, :3]
         t_gt = T_gt_inv[:3, 3]
     else:
-        # Use a single random transform for all combinations to ensure comparability
+        # Initial random pose for the 'single-trial' consistency
         R_gt = get_random_rotation(max_angle_deg=12)
         t_gt = get_random_translation(max_dist=0.08)
         T_gt_inv = np.eye(4)
-        T_gt_inv[:3, :3] = R_gt
-        T_gt_inv[:3, 3] = t_gt
+        T_gt_inv[:3, :3], T_gt_inv[:3, 3] = R_gt, t_gt
         T_gt = np.linalg.inv(T_gt_inv)
         np.savetxt(T_gt_path, T_gt)
 
@@ -52,8 +50,9 @@ def run_experiment_mixed(n_trials=1):
     for sigma in config.noise_grid_mixed:
         for ratio in config.outlier_grid_mixed:
             current_iter += 1
-            print(f"  Combination {current_iter}/{total_iters}: sigma={sigma}, outliers={ratio*100}%")
+            print(f"  Step {current_iter}/{total_iters}: sigma={sigma}, outliers={ratio*100}%")
             
+            # Accumulators for stats
             metrics_sum = {m: {"time": [], "iters": [], "final_energy": [], "rot_err_fricp": [], "trans_err_fricp": [], "rot_err_kabsch": [], "rms": [], "energy": []} for m in config.methods}
             
             for trial in range(n_trials):
@@ -122,7 +121,6 @@ def run_experiment_mixed(n_trials=1):
                          if T_fricp is not None and np.allclose(T_fricp, np.eye(4), atol=1e-5):
                               print(f"      [WARNING] {method_name} returned IDENTITY matrix.")
 
-            # Average and append
             # Average and append
             for m in config.methods:
                 method_name = config.method_names.get(m, f"Method_{m}")
@@ -267,7 +265,6 @@ def run_experiment_noise(n_trials=1):
                      if T_fricp is not None and np.allclose(T_fricp, np.eye(4), atol=1e-5):
                           print(f"      [WARNING] {method_name} returned IDENTITY matrix.")
 
-        # Average and append
             # Average and append
             for m in config.methods:
                 method_name = config.method_names.get(m, f"Method_{m}")
@@ -403,7 +400,6 @@ def run_experiment_outliers(n_trials=1):
                      if T_fricp is not None and np.allclose(T_fricp, np.eye(4), atol=1e-5):
                           print(f"      [WARNING] {method_name} returned IDENTITY matrix.")
 
-        # Average and append
             # Average and append
             for m in config.methods:
                 method_name = config.method_names.get(m, f"Method_{m}")

@@ -9,8 +9,8 @@ class FRICPRunner:
 
     def run(self, target_ply, source_ply, output_dir, method=3, skip_if_exists=False):
         """
-        Runs FRICP.exe and returns the time taken and the resulting transformation.
-        If skip_if_exists is True and output files are present, returns existing results.
+        Execute FRICP.exe and parse stdout stats.
+        Returns metrics + final transformation matrix.
         """
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)

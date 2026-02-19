@@ -188,10 +188,11 @@ int main(int argc, char const ** argv)
     std::string file_source_reg = out_path + "reg_pc.ply";
     write_file(file_source, vertices_source, normal_source, src_vert_colors, file_source_reg);
 
-    //--- Write execution stats to stdout for Python parsing
+    // Export final metrics to stdout for the Python runner
     int final_iters = 0;
     double final_energy = 0.0;
 
+    // Sparse ICP uses its own stat fields
     if (method == SparseICP || method == SICPPPL) {
         final_iters = spars.convergence_iter;
         final_energy = spars.convergence_mse;

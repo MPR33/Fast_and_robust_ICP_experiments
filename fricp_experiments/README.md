@@ -2,15 +2,11 @@
 
 This directory provides a Python framework to benchmark the **Fast and Robust Iterative Closest Point** algorithm. It automates the generation of synthetic datasets, executes the C++ solver, and analyzes performance across various conditions (Noise, Outliers, etc.).
 
-## 🚀 Getting Started
-
-If you have just cloned this repository:
+## 🚀 Setup & Execution
 
 1.  **Build the C++ Core**:
-    Ensure you have complied the main project. The framework expects the executable to be located at:
-    `build/Release/FRICP.exe` (on Windows) or `build/FRICP` (on Linux, update `config.py` accordingly).
-    
-    > **⚠️ CRITICAL NOTE**: This framework relies on patched versions of `main.cpp` AND `FRICP.h` (included in this repo). You MUST compile using these specific files, as they include fixes for exporting convergence statistics (iterations & energy) that are missing in the original author's code.
+    Compile the main project. I've patched `main.cpp`, `ICP.h` and `FRICP.h` to export convergence stats (iterations/energy) which were missing in the original code. 
+    The script expects the executable at `build/Release/FRICP.exe`.
 
 2.  **Install Python Dependencies**:
     ```bash

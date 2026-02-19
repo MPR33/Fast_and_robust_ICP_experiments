@@ -3,7 +3,7 @@ import numpy as np
 
 def plot_experiment_results(df, x_axis, title, save_path):
     """
-    Plots Rotation Error, RMS Error (Comparable), and Execution Time.
+    Generate the main 3-panel plot: Rotation Error, RMS, and Execution Time.
     """
     methods = df['method'].unique()
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
